@@ -1,94 +1,58 @@
 """
-NeuroPrice — Real AI Adapter
+NeuroPrice — Real Gemini Adapter (Phase 2, Step: Real Adapter)
 
-The project originally used Gemini, so the existing class names are
-intentionally preserved:
+This is the ONLY file in the whole system that talks to the actual
+Gemini API. It implements the same `GeminiClient` Protocol
+(`.generate(prompt: str) -> str`) that FakeGeminiClient implements in
+the test suite -- which is why orchestrator.py needed zero changes to
+support this. That isolation was the entire point of using a Protocol
+instead of importing a specific SDK type directly into orchestrator.py.
 
-    RealGeminiClient
-    GeminiAdapterConfigError
-
-This keeps api.py and orchestrator.py unchanged while the actual
-AI provider underneath is OpenAI.
-
-AI responsibility:
-- Read marketing copy
-- Extract persuasion/psychology signals
-- Return raw JSON text
-
-The AI does NOT:
-- calculate pricing
-- calculate elasticity
-- calculate revenue
-- recommend prices
-- interpret financial results
-
-Those responsibilities remain in the NeuroPrice validator,
-orchestrator, and deterministic pricing engine.
-
-REQUIRES:
-    pip install openai
-
-ENVIRONMENT:
-    OPENAI_API_KEY
+REQUIRES: `pip install google-genai --break-system-packages` and a
+GEMINI_API_KEY environment variable. This adapter cannot be exercised
+inside this sandbox (no network route to the Gemini API here) -- it's
+built and structurally reviewable now, and becomes testable the moment
+you run it somewhere with real network access and a key.
 """
 
 import os
-
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 
 class GeminiAdapterConfigError(Exception):
-    """
-    Raised when the AI API configuration is missing.
-
-    The name is preserved for compatibility with the existing
-    NeuroPrice application.
-    """
-
+    """Raised at construction time if the environment isn't set up --
+    fails loudly and immediately, not on the first .generate() call
+    buried inside a retry loop."""
     pass
 
 
 class RealGeminiClient:
-    """
-    Compatibility wrapper for the existing NeuroPrice architecture.
-
-    Despite the historical Gemini class name, this implementation
-    now uses OpenAI internally.
-    """
-
-    def __init__(
-        self,
-        model: str = "gpt-5.6-luna",
-        api_key: str | None = None,
-    ):
-        resolved_key = api_key or os.environ.get("OPENAI_API_KEY")
-
+    def __init__(self, model: str = "gemini-2.0-flash", api_key: str | None = None):
+        resolved_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not resolved_key:
             raise GeminiAdapterConfigError(
-                "OPENAI_API_KEY not set. "
-                "Pass api_key= explicitly or set the environment variable."
+                "GEMINI_API_KEY not set. Pass api_key= explicitly or set the env var."
             )
-
-        self._client = OpenAI(api_key=resolved_key)
+        self._client = genai.Client(api_key=resolved_key)
         self._model = model
 
     def generate(self, prompt: str) -> str:
-        """
-        Send the prompt to OpenAI and return raw JSON text.
+        """Returns raw text. Deliberately does NOT parse or validate here
+        -- that stays the orchestrator's job, so this file has exactly
+        one responsibility: get text back from Gemini.
 
-        Parsing and validation deliberately happen outside this adapter.
-        The validator remains the authority over whether AI output is
-        trusted by the rest of the application.
+        response_mime_type='application/json' asks Gemini to skip markdown
+        code fences, which reduces (but does not eliminate) the odds of a
+        JSONDecodeError on the validator's end -- the validator remains the
+        authority regardless of what this returns.
         """
-
-        response = self._client.responses.create(
+        response = self._client.models.generate_content(
             model=self._model,
-            input=prompt,
-            text={
-                "format": {
-                    "type": "json_object"
-                }
-            },
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.2,  # low but nonzero -- this is classification, not creative writing
+            ),
         )
-
-        return response.output_text
+        return response.text

@@ -1,4 +1,22 @@
-.env
-node_modules/
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
 __pycache__/
+.pytest_cache/
+.venv/
 *.pyc
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local

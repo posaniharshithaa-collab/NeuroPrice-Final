@@ -8,7 +8,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .app { width: min(1320px, calc(100% - 48px)); margin: 0 auto; padding: 24px 0 30px; }
 .topbar { height: 56px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-color); }
 .brand { display:flex; align-items:center; gap:10px; }
-.brand__mark { width:50px; height:50px; display:grid; place-items:center; border:1px solid rgba(211,173,107,.45); border-radius:9px; color:var(--accent-gold); font-family:var(--font-serif); font-size:20px; }
+.brand__mark { width:30px; height:30px; display:grid; place-items:center; border:1px solid rgba(211,173,107,.45); border-radius:9px; color:var(--accent-gold); font-family:var(--font-serif); font-size:20px; }
 .brand__name { font-weight:650; letter-spacing:-.03em; }
 .brand__tag, .topbar__status, .eyebrow, .section-rule span, .hero-visual__label { font-family:var(--font-mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase; }
 .brand__tag { color:var(--text-tertiary); margin-left:6px; }
@@ -48,22 +48,3 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .footer { display:flex; justify-content:space-between; gap:20px; border-top:1px solid var(--border-color); margin-top:54px; padding-top:17px; color:var(--text-tertiary); font:10px var(--font-mono); letter-spacing:.04em; }
 @media (max-width: 850px) { .app { width:min(100% - 28px, 720px); } .hero { grid-template-columns:1fr; padding-top:44px; } .hero-visual { min-height:320px; } .hero__metrics { flex-wrap:wrap; gap:20px; } .topbar__status { display:none; } }
 @media (max-width: 560px) { .app { width:calc(100% - 22px); } .brand__tag { display:none; } .hero h1 { font-size:46px; } .footer { flex-direction:column; } }
-
-/* Final brand sizing */
-.brand__mark.brand__logo { width:58px; height:58px; object-fit:cover; }
-.brand__name { font-size:20px; }
-
-/* Brand lockup composition */
-.topbar { height: 118px; align-items: flex-start; }
-.brand { height: 100%; align-items: flex-start; gap: 0; }
-.brand__mark.brand__logo { width: 96px; height: 96px; margin-top: 0; }
-.brand__name { font-size: 22px; margin-left: 16px; margin-top: 18px; }
-.brand__tag { position: relative; margin-left: 22px; margin-top: 18px; padding-left: 18px; }
-.brand__tag::before { content: ''; position: absolute; left: 0; top: -18px; height: 78px; width: 1px; background: var(--border-color); }
-
-/* Brand name final scale */
-.brand__name { font-size: 28px; font-weight: 700; }
-
-/* Tighten top composition */
-.topbar { height: 96px; }
-.hero { padding-top: 36px; }
