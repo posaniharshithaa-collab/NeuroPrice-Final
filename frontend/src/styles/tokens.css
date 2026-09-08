@@ -1,0 +1,29 @@
+:root {
+  --bg-primary: #080b0d;
+  --bg-secondary: #0d1114;
+  --bg-tertiary: #12171b;
+  --bg-elevated: #151b20;
+  --border-color: rgba(220, 226, 226, .10);
+  --border-color-strong: rgba(220, 226, 226, .18);
+  --text-primary: #f1f2ee;
+  --text-secondary: #9ba4a7;
+  --text-tertiary: #687277;
+  --accent-gold: #d3ad6b;
+  --accent-gold-muted: rgba(211, 173, 107, .12);
+  --accent-sage: #79a994;
+  --accent-sage-muted: rgba(121, 169, 148, .12);
+  --accent-red: #c46c62;
+  --accent-red-muted: rgba(196, 108, 98, .12);
+  --accent-blue: #7c9eb3;
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --space-xs: .5rem;
+  --space-sm: .75rem;
+  --space-md: 1.25rem;
+  --space-lg: 2rem;
+  --space-xl: 3.5rem;
+}
