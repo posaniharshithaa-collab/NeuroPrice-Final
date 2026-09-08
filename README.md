@@ -1,133 +1,378 @@
 # NeuroPrice
 
-AI-assisted pricing scenario analysis: it separates what marketing copy signals about persuasion from what the underlying economics can actually support, then shows the financial consequences of both together.
+### AI-assisted pricing scenario analysis with an evidence-gated AI signal layer and deterministic financial modeling.
+
+NeuroPrice analyzes persuasion signals in marketing copy, translates those signals into a controlled elasticity adjustment, and evaluates predefined pricing scenarios using a deterministic financial model.
+
+The central design principle is simple:
+
+> **AI extracts the signal. The financial engine decides the numbers.**
+
+NeuroPrice is a decision-support system, not a statistically validated price optimizer.
+
+---
 
 ## Problem
 
-Pricing decisions are often made with marketing psychology and unit economics considered separately: a growth team reads persuasive copy and calls it a signal to raise price, while a finance team models elasticity and margin with no visibility into what the copy is doing. NeuroPrice puts both in the same model, but doesn't let either one dominate the other's role.
+Pricing decisions often separate marketing psychology from financial modeling.
+
+A marketing team may see scarcity, social proof, authority, or other persuasive signals and interpret them as pricing power. A finance team may model elasticity, revenue, and contribution without considering what the marketing copy is communicating.
+
+NeuroPrice brings these two perspectives into one pipeline without allowing either layer to take over the other's responsibility.
+
+---
 
 ## Solution
 
-```
-Marketing copy → persuasion signals (Gemini, evidence-gated)
-              → dampens the magnitude of modeled price elasticity
-              → three fixed pricing scenarios (Conservative / Base / Aggressive)
-              → modeled demand, revenue, and contribution per scenario
-              → the scenario with the highest modeled contribution is recommended
+```text
+Marketing copy
+      ↓
+AI-assisted persuasion signal extraction
+      ↓
+Strict schema + evidence validation
+      ↓
+Validated psychology signal
+      ↓
+Controlled elasticity adjustment
+      ↓
+Three fixed pricing scenarios
+      ↓
+Deterministic demand and financial modeling
+      ↓
+Revenue / contribution / margin analysis
+      ↓
+Sensitivity analysis
+      ↓
+Decision-support recommendation
+
 ```
 
-The system deliberately does **not** ask an LLM to output a price. Gemini's only job is scoring six persuasion signals in marketing copy, each with required evidence. That score can only ever make the deterministic pricing engine's demand curve *less price-sensitive* — it never sets a price directly.
+The AI does not directly recommend a price.
+
+Instead, it extracts six persuasion signals from the marketing copy:
+
+- Scarcity
+- Social proof
+- Authority
+- Reciprocity
+- Liking
+- Commitment / consistency
+
+Each signal receives a score from 0–10 and must be supported by evidence from the submitted copy.
+
+---
+
+## Key Design Decision
+
+**Persuasive copy does not set price.**
+
+An earlier design allowed psychology to both:
+
+- increase modeled pricing power, and
+- directly increase the scenario price.
+
+That created a double-counting problem.
+
+The final design deliberately removes that behavior.
+
+Psychology affects only the magnitude of modeled price elasticity:
+
+```text
+psych_norm = composite_score / 10
+
+effective_elasticity =
+    price_elasticity ×
+    (1 − psychology_weight × psych_norm)
+
+```
+
+The pricing scenarios themselves remain fixed:
+
+- **Conservative** = current price
+- **Base** = current price × 1.05
+- **Aggressive** = current price × 1.10
+
+Therefore: **the AI signal changes elasticity, not price.**
+
+This keeps the AI influence narrow, explicit, and auditable.
+
+---
 
 ## Architecture
 
+```text
+                 Marketing Copy
+                       │
+                       ▼
+             ┌──────────────────┐
+             │   OpenAI API      │
+             │ Signal Extraction │
+             └────────┬─────────┘
+                      │
+                      ▼
+             Raw structured JSON
+                      │
+                      ▼
+             ┌──────────────────┐
+             │ Schema Validation │
+             └────────┬─────────┘
+                      │
+                      ▼
+             ┌──────────────────┐
+             │ Evidence          │
+             │ Validation        │
+             └────────┬─────────┘
+                      │
+                Validated signal
+                      │
+                      ▼
+             ┌──────────────────┐
+             │ Retry Orchestrator│
+             │ Max 2 attempts    │
+             └────────┬─────────┘
+                      │
+                      ▼
+             ┌──────────────────┐
+             │ Deterministic     │
+             │ Pricing Engine    │
+             └────────┬─────────┘
+                      │
+                      ▼
+             ┌──────────────────┐
+             │ Sensitivity       │
+             │ Analysis          │
+             └────────┬─────────┘
+                      │
+                      ▼
+                 FastAPI API
+                      │
+                      ▼
+             React + Vite Dashboard
+
 ```
-Marketing copy + economic inputs
-        │
-        ▼
-Gemini (psychology_prompt.py) ── generates six 0–10 scores + evidence
-        │
-        ▼
-Schema validation (psychology_schema.py) ── structural checks
-        │
-        ▼
-Evidence validation (evidence_validation.py) ── every nonzero score
-        │                                        must have real, grounded evidence
-        ▼
-Retry orchestrator (orchestrator.py) ── max 2 Gemini attempts, both
-        │                                validated, no bypass on retry
-        ▼
-Deterministic pricing engine (pricing_engine.py) ── zero AI, zero randomness
-        │
-        ▼
-FastAPI (api.py) ── thin HTTP layer, no business logic
-        │
-        ▼
-React dashboard (ScenarioComparison + children)
-```
 
-Gemini is treated as an **untrusted probabilistic component**. A strict, deterministic validator — not the prompt — decides whether its output is ever allowed to reach the pricing engine. If validation fails twice, the pipeline returns a controlled error; it never falls back to a default or partial psychology score.
+The AI is treated as an untrusted probabilistic component.
 
-## Key design decision
+A deterministic validator decides whether its output is allowed to influence the pricing engine.
 
-Persuasive copy does not set price. It reduces the **magnitude of modeled price elasticity** — the pricing engine's demand curve becomes less sensitive to a price increase, which is the economically defensible interpretation of "persuasive copy earns pricing power." Scenario prices themselves are a fixed band (current price, +5%, +10%), independent of the psychology score, specifically to avoid the same signal doing two jobs at once (an earlier design iteration let psychology both dampen elasticity *and* set the price lift — that double-counting was deliberately removed).
+If validation fails twice, the pipeline returns a controlled error.
 
-## Financial model
+It never passes partial or unvalidated psychology data into the financial model.
+
+---
+
+## Production Architecture
+
+```text
+GitHub
+   │
+   ├───────────────┐
+   ▼               ▼
+Render           Render
+Frontend         Backend
+   │               │
+React/Vite       FastAPI
+   │               │
+   └───────┬───────┘
+           ▼
+       OpenAI API
 
 ```
-psych_norm            = composite_score / 10
-effective_elasticity  = price_elasticity × (1 − psychology_weight × psych_norm)
 
-D0        = estimated_market_size × conversion_rate
-D(P)      = D0 × (P / current_price) ^ effective_elasticity
-revenue(P)      = P × D(P)
-contribution(P) = (P − variable_cost) × D(P)
+The frontend communicates with the production FastAPI backend through the configured `VITE_API_BASE_URL`.
 
-recommended scenario = the one with the highest contribution(P)
+The backend keeps the API key server-side.
+
+The OpenAI API key is never exposed to the browser.
+
+---
+
+## Financial Model
+
+The financial engine is completely deterministic.
+
+**Initial demand**
+
+```text
+D0 = estimated_market_size × conversion_rate
+
 ```
 
-All of this is plain Python with no AI involvement — testable and auditable independent of any Gemini call.
+**Price-sensitive demand**
+
+```text
+D(P) =
+    D0 ×
+    (P / current_price) ^ effective_elasticity
+
+```
+
+**Revenue**
+
+```text
+revenue(P) = P × D(P)
+
+```
+
+**Contribution**
+
+```text
+contribution(P) =
+    (P − variable_cost) × D(P)
+
+```
+
+**Recommended scenario**
+
+```text
+recommended scenario =
+    scenario with the highest modeled contribution
+
+```
+
+This recommendation is a model-based scenario selection, not a claim about the statistically optimal real-world price.
+
+---
+
+## Why the Model Uses Fixed Price Bands
+
+The system evaluates three predefined scenarios:
+
+| Scenario | Price Change |
+|---|---:|
+| Conservative | 0% |
+| Base | +5% |
+| Aggressive | +10% |
+
+These price bands are modeling assumptions.
+
+They are intentionally independent of the psychology score.
+
+This prevents the AI from effectively saying:
+
+> "The copy is persuasive, therefore increase the price by whatever I think is appropriate."
+
+Instead, the AI produces a bounded signal and the deterministic engine evaluates the consequences.
+
+---
+
+## AI Responsibility
+
+OpenAI is responsible only for:
+
+- reading the marketing copy
+- identifying persuasion signals
+- assigning six 0–10 heuristic scores
+- providing evidence for non-zero scores
+- identifying dominant triggers
+
+OpenAI does **not**:
+
+- calculate price elasticity
+- calculate demand
+- calculate revenue
+- calculate contribution
+- calculate margin
+- recommend a price
+- estimate willingness to pay
+- claim causal behavioral effects
+
+All financial calculations happen outside the LLM.
+
+---
 
 ## Validation
 
-Gemini's raw output must pass, in order:
-1. **Schema validation** — six required trigger keys, each an integer 0–10, evidence entries reference a known trigger with a non-empty reason.
-2. **Evidence validation** — a nonzero score requires matching evidence (completeness); the evidence's wording must contain trigger-appropriate vocabulary (plausibility); the evidence must share real content with the submitted copy (grounding, catches hallucination).
+AI output passes through multiple deterministic checks.
 
-All three evidence checks are heuristic, not proof of truth — a fluent hallucination reusing the right vocabulary and quoting real words out of context could pass. That's a documented limitation, not a hidden one.
+**1. Schema validation**
 
-## Retry strategy
+The response must contain:
 
-Maximum two Gemini attempts per analysis. The second attempt receives a constrained repair prompt containing the exact validation failure. **Both** attempts go through full validation with no special-casing for the last attempt. If both fail, the API returns `ok: false` with a controlled error message — the pricing engine is never called with unvalidated data.
+- all six required trigger keys
+- integer scores from 0–10
+- valid evidence structures
+- supported trigger names
+- non-empty evidence reasons
 
-## Sensitivity analysis
+**2. Evidence completeness**
 
-For every successful analysis, a small grid sweep (elasticity × psychology weight, centered on the actual request's own values) re-runs the deterministic engine to show how fragile the recommendation is to its own assumptions. This is a scenario sweep, explicitly **not** a statistical confidence interval or a probability estimate — the dashboard states this directly.
+Every non-zero psychology score must have corresponding evidence.
 
-## Limitations
+For example: `scarcity = 8` requires evidence explaining why the submitted copy contains scarcity.
 
-- Price elasticity is user-supplied or a documented segment-level default, not empirically estimated.
-- Persuasion-signal scores are heuristic and evidence-gated, not validated behavioral measurements.
-- Evidence grounding/plausibility checks are keyword and overlap heuristics, not semantic verification.
-- No causal claim is made between copy and actual buyer behavior.
-- Competitor response, cross-price effects, and market saturation are not modeled.
-- Only upward pricing scenarios are modeled in this version.
-- Scenario price bands (0%, +5%, +10%) are fixed modeling assumptions, not derived from data.
+**3. Evidence plausibility**
 
-## Tech stack
+Evidence is checked for trigger-appropriate vocabulary.
 
-React + Vite · FastAPI · Python · Gemini API (`google-genai`) · Pytest
+**4. Evidence grounding**
 
-## Running locally
+Evidence must share real content with the submitted marketing copy. This helps catch unsupported or hallucinated evidence.
 
-**Backend:**
-```bash
-cd backend
-pip install -r requirements.txt
-cp .env.example .env   # fill in GEMINI_API_KEY
-uvicorn api:app --reload --port 8000
+**Important limitation:** these checks are heuristics, not proof of truth. A fluent hallucination that reuses appropriate vocabulary or real words out of context could still pass. That limitation is explicitly documented rather than hidden.
+
+---
+
+## Retry Strategy
+
+The AI pipeline allows a maximum of two attempts.
+
+```text
+Attempt 1
+   ↓
+Validation
+   │
+   ├── Pass → continue
+   │
+   └── Fail
+         ↓
+   Constrained repair prompt
+         ↓
+Attempt 2
+   ↓
+Validation
+   │
+   ├── Pass → continue
+   │
+   └── Fail → controlled error
+
 ```
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-cp .env.example .env.local   # set VITE_API_BASE_URL if not localhost:8000
-npm run dev
-```
+The second attempt receives the exact validation failure.
 
-## Environment variables
+Both attempts pass through the same validation pipeline.
 
-| Variable | Where | Required | Notes |
-|---|---|---|---|
-| `GEMINI_API_KEY` | backend | Yes | App fails fast at startup if missing |
-| `NEUROPRICE_CORS_ORIGINS` | backend | No | Comma-separated allowed origins; defaults to `http://localhost:5173` |
-| `VITE_API_BASE_URL` | frontend | No (dev) / Yes (prod) | Defaults to `http://localhost:8000` for local dev only |
+There is no validator bypass on the final attempt.
 
-## API
+If both attempts fail, `ok = false` and the pricing engine is never called with unvalidated AI output.
 
-**`POST /analyze`**
+---
 
-Request:
+## Sensitivity Analysis
+
+For every successful analysis, NeuroPrice performs a small deterministic grid sweep across:
+
+- price elasticity
+- psychology weight
+
+The sweep is centered around the actual request's values.
+
+It re-runs the pricing engine across the grid and identifies whether the recommended scenario changes.
+
+This helps answer: *"How sensitive is this recommendation to the model's own assumptions?"*
+
+The sensitivity grid is **not**:
+
+- a statistical confidence interval
+- a probability estimate
+- a forecast distribution
+
+It is a scenario-based robustness check.
+
+---
+
+## Example Inputs
+
 ```json
 {
   "current_price": 999,
@@ -139,98 +384,461 @@ Request:
   "psychology_weight": 0.4,
   "marketing_copy": "Only 5 seats remaining! Join 50,000+ customers. Offer ends tonight."
 }
+
 ```
 
-Response (`ok: true` case, abbreviated):
+If price elasticity is omitted, NeuroPrice uses the documented segment-level default.
+
+Available segments:
+
+- `price_sensitive`
+- `neutral`
+- `price_insensitive`
+
+Segment defaults are assumptions, not empirical estimates.
+
+---
+
+## API
+
+### `POST /analyze`
+
+**Accepts:**
+
+- product economics
+- customer segment
+- optional elasticity
+- psychology weighting
+- marketing copy
+
+**Returns:**
+
+- AI psychology signals
+- composite score
+- dominant triggers
+- evidence
+- effective elasticity
+- pricing scenarios
+- modeled demand
+- revenue
+- contribution
+- margin
+- recommended scenario
+- sensitivity analysis
+- assumptions
+- model trace
+
+### `GET /health`
+
+Returns:
+
 ```json
 {
-  "ok": true,
-  "attempts_used": 1,
-  "psychology": { "scores": {...}, "composite_score": 5.1, "dominant_triggers": [...], "evidence": [...] },
-  "financials": {
-    "scenarios": [{ "name": "Aggressive", "price": 1098.9, "contribution": 319041.19, "recommended": true, ... }],
-    "recommended_scenario": "Aggressive",
-    "assumptions": {...},
-    "modeled_range": { "low": 999, "high": 1098.9 },
-    "sensitivity": { "grid": [...], "winner_flips": [...] }
-  }
+  "status": "ok"
 }
+
 ```
 
-A failed Gemini analysis (both attempts exhausted) returns HTTP 200 with `ok: false` and an `error_message` — this is a legitimate pipeline outcome, not a server error. `price_elasticity` omitted entirely falls back to a documented segment default. `variable_cost >= current_price`, invalid ranges, etc. return HTTP 400.
+Used as a production liveness check.
 
-**`GET /health`** — liveness check, returns `{"status": "ok"}`.
+---
+
+## Technology Stack
+
+**Frontend**
+
+- React
+- Vite
+- JavaScript
+- Custom CSS
+- SVG-based visualization
+
+**Backend**
+
+- Python
+- FastAPI
+- Pydantic
+- OpenAI API
+
+**Modeling**
+
+- Deterministic Python pricing engine
+- Elasticity modeling
+- Scenario analysis
+- Sensitivity analysis
+
+**Testing**
+
+- Pytest
+- Adversarial validation tests
+- API-layer tests
+- Retry orchestration tests
+- Pricing-engine tests
+- Frontend production-build verification
+
+**Deployment**
+
+- GitHub
+- Render
+- Production FastAPI backend
+- Production React frontend
+
+---
 
 ## Testing
 
-Backend: **67/67 passing** (`pytest`), covering the pricing engine, schema/evidence validation (including a full adversarial suite: malformed JSON, out-of-range scores, missing/unsupported evidence, hallucinated evidence, wrong-trigger evidence), retry orchestration, the Gemini↔pricing bridge, the sensitivity summary, and the FastAPI layer (success, retry recovery, persistent failure, invalid input, fail-fast startup).
+### Backend
 
-Frontend: production build verified clean; component tree verified via actual server-side React rendering (not just source inspection) across idle form, submitting form, successful result (with and without sensitivity data), error result, and manual-elasticity input mode — checked for runtime errors, `NaN`, and `undefined` in rendered output.
+**67/67 tests passing**
 
-## Portfolio positioning
+The test suite covers:
 
-NeuroPrice is a decision-support tool, not a statistically validated price optimizer. It does not claim to know the optimal price, predict actual customer behavior, or prove a causal link between marketing copy and revenue. What it demonstrates is a specific architectural discipline: an LLM is useful for extracting structured signal from unstructured text, but should never be the thing deciding the number — that stays in a deterministic, auditable, independently-tested engine, with the LLM's output validated by strict, evidence-gated rules before it's ever allowed to influence a financial calculation.
+- pricing engine behavior
+- schema validation
+- evidence validation
+- malformed JSON
+- out-of-range scores
+- missing evidence
+- unsupported evidence
+- hallucinated evidence
+- wrong-trigger evidence
+- retry recovery
+- persistent AI failure
+- AI-to-pricing bridge
+- sensitivity analysis
+- FastAPI success responses
+- invalid inputs
+- fail-fast startup behavior
 
+### Frontend
 
-## Repository structure
+Production build verified successfully.
+
+The component tree was also checked through actual server-side React rendering across:
+
+- idle form
+- submitting state
+- successful analysis
+- successful analysis with sensitivity data
+- error state
+- manual elasticity input mode
+
+The rendered output was checked for:
+
+- runtime errors
+- NaN
+- undefined
+- invalid component output
+
+---
+
+## Limitations
+
+NeuroPrice intentionally does not claim more than the model can support.
+
+1. **Elasticity is not empirically estimated** — Price elasticity is user-supplied or comes from a documented segment-level assumption.
+2. **Psychology scores are heuristic** — The six persuasion signals are structured heuristics, not validated behavioral measurements.
+3. **Evidence validation is heuristic** — Keyword and content-overlap checks are not semantic proof.
+4. **No causal claims** — The system does not claim that persuasive copy causes higher prices, conversion, or revenue.
+5. **No competitor modeling** — Competitor response and competitive pricing are not modeled.
+6. **No cross-price effects** — Substitution between products is not modeled.
+7. **No market saturation model** — Market saturation is outside the current model.
+8. **Upward scenarios only** — The current version evaluates 0%, +5%, +10%. It does not currently model price reductions.
+9. **Fixed price bands** — The scenario bands are explicit modeling assumptions rather than data-derived recommendations.
+
+---
+
+## Portfolio Positioning
+
+NeuroPrice should be presented as:
+
+> An AI-assisted financial decision-support system that extracts structured persuasion signals from marketing copy, validates those signals with deterministic evidence rules, and passes only validated information into an independently tested pricing engine.
+
+It should **not** be presented as:
+
+- a statistically validated price optimizer
+- a willingness-to-pay predictor
+- a customer behavior predictor
+- an autonomous pricing agent
+- proof that marketing psychology causes revenue changes
+
+The interesting part of NeuroPrice is not simply that an LLM is involved. The interesting part is the boundary between probabilistic AI and deterministic finance.
 
 ```text
-backend/
-  api.py
-  core.py
-  pricing_engine.py
-  sensitivity.py
-  psychology_prompt.py
-  psychology_schema.py
-  evidence_validation.py
-  orchestrator.py
-  gemini_adapter.py
-  test_*.py
+Unstructured text
+       ↓
+Probabilistic AI
+       ↓
+Strict validation
+       ↓
+Structured signal
+       ↓
+Deterministic financial model
+       ↓
+Auditable decision support
 
-frontend/
-  index.html
-  package.json
-  src/
-    App.jsx
-    components/
-    api/
-    lib/
-    styles/
 ```
 
-## Local development
+---
+
+## Repository Structure
+
+```text
+NeuroPrice/
+│
+├── backend/
+│   ├── api.py
+│   ├── core.py
+│   ├── pricing_engine.py
+│   ├── sensitivity.py
+│   ├── psychology_prompt.py
+│   ├── psychology_schema.py
+│   ├── evidence_validation.py
+│   ├── orchestrator.py
+│   ├── gemini_adapter.py
+│   ├── requirements.txt
+│   └── test_*.py
+│
+├── frontend/
+│   ├── index.html
+│   ├── package.json
+│   ├── public/
+│   │   └── favicon.png
+│   └── src/
+│       ├── App.jsx
+│       ├── api/
+│       ├── components/
+│       ├── lib/
+│       └── styles/
+│
+├── .gitignore
+├── DEPLOYMENT.md
+└── README.md
+
+```
+
+> **Note:** `gemini_adapter.py` retains its historical filename and compatibility class names from the original architecture, but the current implementation uses the OpenAI API internally.
+
+---
+
+## Local Development
 
 ### Backend
 
 ```bash
 cd backend
+
 python -m venv .venv
-# Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-# Create .env from .env.example and set GEMINI_API_KEY
-uvicorn api:app --reload --port 8000
+
 ```
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+
+```
+
+Create the backend environment file from the provided example and configure:
+
+- `OPENAI_API_KEY`
+- `NEUROPRICE_CORS_ORIGINS`
+
+Start the API:
+
+```bash
+uvicorn api:app --reload --port 8000
+
+```
+
+The local API runs on: `http://localhost:8000`
 
 ### Frontend
 
-In a second terminal:
+Open a second terminal:
 
 ```bash
 cd frontend
 npm install
 npm run dev
+
 ```
 
-For local development, the frontend defaults to `http://localhost:8000`. For deployment, set `VITE_API_BASE_URL` to the live backend URL at frontend build time.
+The Vite development server runs on: `http://localhost:5173`
 
-## Deployment
+For local development, the frontend defaults to the local FastAPI backend.
 
-See `DEPLOYMENT.md`. The backend must receive `GEMINI_API_KEY` and `NEUROPRICE_CORS_ORIGINS`. The frontend only needs `VITE_API_BASE_URL`. Never expose the Gemini key through Vite or frontend source.
+For deployment, configure `VITE_API_BASE_URL` with the production backend address.
 
-## Status
+---
 
-The repository is deployment-ready. Live hosting and production browser end-to-end verification require external hosting accounts and credentials.
+## Environment Variables
 
-## Premium dashboard UI
-The frontend is designed as a dark fintech-style decision dashboard. It includes an editorial marketing-copy input, compact economics controls, an AI signal layer with evidence, an explicit psychology-to-elasticity model trace, scenario cards, real response-driven revenue/contribution visualizations, financial-impact deltas, a sensitivity map, assumptions, and methodology limitations. Charts are rendered from backend-returned scenario values without adding a second financial model in the browser.
+| Variable | Location | Required | Purpose |
+|---|---|---:|---|
+| `OPENAI_API_KEY` | Backend | Yes | Authenticates the OpenAI API |
+| `NEUROPRICE_CORS_ORIGINS` | Backend | Yes in production | Allows the deployed frontend origin |
+| `VITE_API_BASE_URL` | Frontend | Yes in production | Points the frontend to the production API |
+
+The OpenAI API key must remain server-side. It must never be placed in:
+
+- React source code
+- Vite client environment variables
+- browser-visible configuration
+- GitHub
+
+---
+
+## Production Deployment
+
+The deployed architecture uses separate frontend and backend services.
+
+```text
+GitHub
+   │
+   ├── Render Static Site
+   │       └── React + Vite frontend
+   │
+   └── Render Web Service
+           └── FastAPI backend
+                    │
+                    ▼
+                OpenAI API
+
+```
+
+The frontend is configured with the production backend URL.
+
+The backend is configured with:
+
+- `OPENAI_API_KEY`
+- `NEUROPRICE_CORS_ORIGINS`
+
+The production application also exposes:
+
+- `GET /health`
+- `POST /analyze`
+
+---
+
+## UI / Product Design
+
+NeuroPrice uses a dark fintech-style interface designed around decision support rather than generic AI chat.
+
+The dashboard includes:
+
+- editorial marketing-copy input
+- product economics controls
+- customer segment selection
+- psychology weighting
+- AI signal scores
+- evidence for detected signals
+- psychology-to-elasticity model trace
+- scenario comparison
+- revenue and contribution analysis
+- financial-impact deltas
+- sensitivity visualization
+- assumptions
+- methodology limitations
+
+The visual system intentionally separates:
+
+```text
+MARKETING SIGNALS
+        ↓
+ELASTICITY
+        ↓
+FINANCIAL SCENARIOS
+
+```
+
+The charts are rendered from backend-returned values. The browser does not implement a second financial model.
+
+---
+
+## Example Decision Flow
+
+A marketing message containing strong scarcity and social proof may produce:
+
+| Trigger Score  |      |
+| -------------- | ---- |
+| Scarcity       | 8/10 |
+| Social Proof   | 7/10 |
+| Authority      | 2/10 |
+| Reciprocity    | 1/10 |
+| Liking         | 3/10 |
+| Commitment     | 2/10 |
+
+The scores are validated first.
+
+The composite signal is then used to adjust the magnitude of price elasticity.
+
+The pricing engine independently evaluates: Conservative, Base, Aggressive.
+
+The system compares modeled contribution across those scenarios.
+
+The highest-contribution scenario becomes the recommendation.
+
+**The AI never directly chooses the price.**
+
+---
+
+## Why This Project Matters
+
+NeuroPrice demonstrates a practical pattern for combining LLMs with financial systems:
+
+> Use AI where unstructured language needs interpretation. Use deterministic code where financial consequences need calculation.
+
+That separation makes the system:
+
+- easier to test
+- easier to audit
+- easier to explain
+- safer to reason about
+- less dependent on LLM consistency
+- more defensible in a finance context
+
+---
+
+## Project Status
+
+**Production deployed.**
+
+| Component Status     |                 |
+| -------------------- | --------------- |
+| Frontend             | ✓ Live          |
+| Backend              | ✓ Live          |
+| Production API       | ✓ Connected     |
+| OpenAI integration   | ✓ Implemented   |
+| CORS                 | ✓ Configured    |
+| Deterministic engine | ✓ Implemented   |
+| AI validation        | ✓ Implemented   |
+| Retry handling       | ✓ Implemented   |
+| Sensitivity analysis | ✓ Implemented   |
+| Backend tests        | ✓ 67/67 passing |
+| Frontend build       | ✓ Verified      |
+| Premium dashboard    | ✓ Implemented   |
+
+---
+
+## Author
+
+**Harshitha**
+
+MBA Finance | Information Technology
+
+**Interests:**
+
+- Financial Modeling
+- FinTech
+- AI-assisted Decision Support
+- Business Analytics
+- Data-driven Finance
+- Technology + Finance
